@@ -1,8 +1,10 @@
 <?php
 
-namespace Otokapanadze\CapitalApi;
+namespace OtoKapanadze\CapitalApi;
 
 use Illuminate\Support\ServiceProvider;
+use OtoKapanadze\CapitalApi\Contracts\ApiClientInterface;
+use OtoKapanadze\CapitalApi\Http\ApiClient;
 
 class CapitalApiServiceProvider extends ServiceProvider
 {
@@ -25,6 +27,8 @@ class CapitalApiServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bind(ApiClientInterface::class, ApiClient::class);
+
         $this->mergeConfigFrom(
             __DIR__.'/config/capital-api.php', 'capital-api'
         );
