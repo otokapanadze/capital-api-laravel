@@ -3,9 +3,16 @@
 namespace OtoKapanadze\CapitalApi;
 
 use OtoKapanadze\CapitalApi\Contracts\ApiClientInterface;
+use phpseclib3\Crypt\PublicKeyLoader as PhpseclibPublicKeyLoader;
+use phpseclib3\Crypt\RSA;
 
 class CapitalApiService
 {
+    const API_BASE_URL = 'https://api-capital.backend-capital.com/api/v1/';
+    const HEADER_SECURITY_TOKEN = 'X-SECURITY-TOKEN';
+    const HEADER_CST = 'CST';
+
+
     protected $apiClient;
 
     public function __construct(ApiClientInterface $apiClient)
@@ -13,23 +20,45 @@ class CapitalApiService
         $this->apiClient = $apiClient;
     }
 
-    public function get(string $endpoint, array $queryParams = []): array
+    public function authenticate(string $apiKey, string $login, string $password, bool $encryptPassword = false): array
     {
-        return $this->apiClient->get($endpoint, $queryParams);
+        if ($encryptPassword) {
+            $encryptionResponse = $this->apiClient->get('/session/encryptionKey', [
+                'X-CAP-API-KEY' => $apiKey,
+            ]);
+
+            $encryptedPassword = $this->encryptPassword(
+                $encryptionResponse['encryptionKey'],
+                $encryptionResponse['timestamp'],
+                $password
+            );
+
+            $password = $encryptedPassword;
+        }
+
+        $response = $this->apiClient->post('/session', [
+            'identifier' => $login,
+            'password' => $password,
+            'encryptedPassword' => $encryptPassword,
+        ], [
+            'X-CAP-API-KEY' => $apiKey,
+        ]);
+
+        return [
+            'CST' => $response['headers']['CST'],
+            'X-SECURITY-TOKEN' => $response['headers']['X-SECURITY-TOKEN'],
+        ];
     }
 
-    public function post(string $endpoint, array $data): array
+    private function encryptPassword(string $encryptionKey, int $timestamp, string $password): string
     {
-        return $this->apiClient->post($endpoint, $data);
-    }
+        $rsa = PhpseclibPublicKeyLoader::load($encryptionKey);
+        $rsa = $rsa->withPadding(RSA::ENCRYPTION_PKCS1);
 
-    public function put(string $endpoint, array $data): array
-    {
-        return $this->apiClient->put($endpoint, $data);
-    }
+        $data = $password . '|' . $timestamp;
+        $data = base64_encode($data);
 
-    public function delete(string $endpoint, array $data = []): array
-    {
-        return $this->apiClient->delete($endpoint, $data);
+        $encryptedPassword = $rsa->encrypt($data);
+        return base64_encode($encryptedPassword);
     }
 }
