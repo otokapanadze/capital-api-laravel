@@ -15,18 +15,28 @@ class ApiClient implements ApiClientInterface
         $this->httpClient = new Client();
     }
 
-    public function get(string $endpoint, array $queryParams = []): array
+    public function get(string $endpoint, array $queryParams = [], array $headers = []): array
     {
         try {
             $response = $this->httpClient->get($endpoint, [
                 'query' => $queryParams,
+                'headers' => $headers,
             ]);
 
-            return json_decode($response->getBody()->getContents(), true);
+            $responseHeaders = [];
+            foreach ($response->getHeaders() as $headerName => $headerValues) {
+                $responseHeaders[$headerName] = implode(', ', $headerValues);
+            }
+
+            return [
+                'headers' => $responseHeaders,
+                'body' => json_decode($response->getBody()->getContents(), true),
+            ];
         } catch (GuzzleException $e) {
             throw new \RuntimeException('Error executing GET request: ' . $e->getMessage());
         }
     }
+
 
     public function post(string $endpoint, array $data, array $headers = []): array
     {
@@ -36,7 +46,15 @@ class ApiClient implements ApiClientInterface
                 'headers' => $headers,
             ]);
 
-            return json_decode($response->getBody()->getContents(), true);
+            $responseHeaders = [];
+            foreach ($response->getHeaders() as $headerName => $headerValues) {
+                $responseHeaders[$headerName] = implode(', ', $headerValues);
+            }
+
+            return [
+                'headers' => $responseHeaders,
+                'body' => json_decode($response->getBody()->getContents(), true),
+            ];
         } catch (GuzzleException $e) {
             throw new \RuntimeException('Error executing POST request: ' . $e->getMessage());
         }

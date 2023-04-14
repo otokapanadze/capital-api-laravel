@@ -1,6 +1,8 @@
 <?php
 
 return [
-    'username' => env('CAPITAL_API_USERNAME'),
+    'security_token' => env('CAPITAL_API_SECURITY_TOKEN', ''),
+    'cst' => env('CAPITAL_API_CST', ''),
+    'login' => env('CAPITAL_API_LOGIN'),
     'password' => env('CAPITAL_API_PASSWORD'),
 ];
