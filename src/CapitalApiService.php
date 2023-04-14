@@ -8,6 +8,9 @@ use phpseclib3\Crypt\RSA;
 
 class CapitalApiService
 {
+    private $sessionExpiration;
+
+
     const API_BASE_URL = 'https://api-capital.backend-capital.com/api/v1/';
     const HEADER_SECURITY_TOKEN = 'X-SECURITY-TOKEN';
     const HEADER_CST = 'CST';
@@ -20,45 +23,70 @@ class CapitalApiService
         $this->apiClient = $apiClient;
     }
 
-    public function authenticate(string $apiKey, string $login, string $password, bool $encryptPassword = false): array
+    public function authenticate(): void
     {
-        if ($encryptPassword) {
-            $encryptionResponse = $this->apiClient->get('/session/encryptionKey', [
-                'X-CAP-API-KEY' => $apiKey,
-            ]);
+        $apiKey = config('capital-api.security_token');
+        $login = config('capital-api.login');
+        $password = config('capital-api.password');
 
-            $encryptedPassword = $this->encryptPassword(
-                $encryptionResponse['encryptionKey'],
-                $encryptionResponse['timestamp'],
-                $password
-            );
-
-            $password = $encryptedPassword;
-        }
-
-        $response = $this->apiClient->post('/session', [
+        $response = $this->apiClient->post(self::API_BASE_URL . 'session', [
             'identifier' => $login,
             'password' => $password,
-            'encryptedPassword' => $encryptPassword,
         ], [
             'X-CAP-API-KEY' => $apiKey,
         ]);
 
-        return [
-            'CST' => $response['headers']['CST'],
-            'X-SECURITY-TOKEN' => $response['headers']['X-SECURITY-TOKEN'],
-        ];
+        $this->sessionExpiration = time() + 3600;
+
+        config(['capital-api.cst' => $response['headers']['CST'], 'capital-api.security_token' => $response['headers']['X-SECURITY-TOKEN']]);
     }
 
-    private function encryptPassword(string $encryptionKey, int $timestamp, string $password): string
+    private function checkAndRefreshAuthentication(): void
     {
-        $rsa = PhpseclibPublicKeyLoader::load($encryptionKey);
-        $rsa = $rsa->withPadding(RSA::ENCRYPTION_PKCS1);
+        if ($this->isAuthenticationExpired()) {
+            $this->authenticate();
+        }
+    }
 
-        $data = $password . '|' . $timestamp;
-        $data = base64_encode($data);
+    private function isAuthenticationExpired(): bool
+    {
+        return !$this->sessionExpiration || time() >= $this->sessionExpiration;
+    }
 
-        $encryptedPassword = $rsa->encrypt($data);
-        return base64_encode($encryptedPassword);
+    public function getAllPositions(): array
+    {
+        $this->checkAndRefreshAuthentication();
+
+        $headers = [
+            self::HEADER_SECURITY_TOKEN => config('capital-api.security_token'),
+            self::HEADER_CST => config('capital-api.cst'),
+            'Content-Type' => 'application/json',
+        ];
+
+        return $this->apiClient->get(self::API_BASE_URL . 'positions', [], $headers)['body'] ?? ['positions' => []];
+    }
+
+    public function createPosition(
+        string $epic,
+        string $direction,
+        int    $size,
+        array  $options = []
+    ): array
+    {
+        $this->checkAndRefreshAuthentication();
+
+        $headers = [
+            self::HEADER_SECURITY_TOKEN => config('capital-api.security_token'),
+            self::HEADER_CST => config('capital-api.cst'),
+            'Content-Type' => 'application/json',
+        ];
+
+        $data = array_merge([
+            'epic' => $epic,
+            'direction' => $direction,
+            'size' => $size,
+        ], $options);
+
+        return $this->apiClient->post(self::API_BASE_URL . 'positions', $data, $headers)['body'] ?? [];
     }
 }
