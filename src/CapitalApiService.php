@@ -53,6 +53,26 @@ class CapitalApiService
         return !$this->sessionExpiration || time() >= $this->sessionExpiration;
     }
 
+    public function serverTime(): array
+    {
+        $this->checkAndRefreshAuthentication();
+
+        return $this->apiClient->get(self::API_BASE_URL . 'time', [])['body'] ?? [];
+    }
+
+    public function ping(): array
+    {
+        $this->checkAndRefreshAuthentication();
+
+        $headers = [
+            self::HEADER_SECURITY_TOKEN => config('capital-api.security_token'),
+            self::HEADER_CST => config('capital-api.cst'),
+            'Content-Type' => 'application/json',
+        ];
+
+        return $this->apiClient->get(self::API_BASE_URL . 'ping', [], $headers)['body'] ?? [];
+    }
+
     public function getAllPositions(): array
     {
         $this->checkAndRefreshAuthentication();
